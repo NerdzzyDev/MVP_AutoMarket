@@ -1,3 +1,4 @@
+# app/models/user.py (Vehicle)
 from sqlalchemy import Boolean, Column, ForeignKey, Integer, String
 from sqlalchemy.orm import relationship
 
@@ -14,6 +15,7 @@ class Vehicle(Base):
     model = Column(String(128))
     engine = Column(String(128))
     kba_code = Column(String(64))
-    is_selected = Column(Boolean, default=False)  # <- новое поле
+    search_code = Column(String(128), nullable=True)  # <- новое поле
+    is_selected = Column(Boolean, default=False)
 
     user = relationship("User", back_populates="vehicles")

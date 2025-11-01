@@ -7,6 +7,7 @@ class VehicleBase(BaseModel):
     model: str
     engine: str
     kba_code: str
+    search_code: str | None = None  # <- новое поле
 
 
 class VehicleCreate(VehicleBase):

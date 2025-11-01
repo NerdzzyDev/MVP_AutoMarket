@@ -1,53 +1,84 @@
-from fastapi import APIRouter
+from enum import Enum
 
-router = APIRouter(prefix="/search-parts", tags=["Search"])
+from fastapi import APIRouter, File, HTTPException, Query, UploadFile, status
+from pydantic import BaseModel
+
+router = APIRouter(prefix="/search", tags=["search"])
 
 
-@router.post("/")
-def search_parts_mock():
-    """Мок-ручка для имитации результата поиска запчастей."""
-    return {
-        "status": "ok",
-        "data": {
-            "products": [
-                {
-                    "product_url": "https://www.autoteile-markt.de/shop/artikel/bremsbelagsatz-scheibenbremse-vorderachse-master-sport-germany-13046027642n-set-ms-d235e106d005c3f0e7c4b63951ffc162",
-                    "title": "Bremsbelagsatz, Scheibenbremse Vorderachse MASTER-SPORT GERMANY 13046027642N-SET-MS",
-                    "image_url": "https://cdn.autoteile-markt.de/tecdoc/0358/13046027642N-SET-MS_550_500_75.webp",
-                    "price": "30,91 €",
-                    "seller_name": "N/A",
-                    "delivery_time": "3 - 5 Werktage",
-                    "description": "Das Produkt Bremsbelagsatz, Scheibenbremse des Herstellers MASTER-SPORT GERMANY hat die Breite 175 mm. Die Dicke/Stärke ist 20,1 mm, das Bruttogewicht beträgt 2,75 kg und die Höhe lautet 70 mm. Bremsbelagsatz, Scheibenbremse hat die ergänzenden Artikelinformationen mit Anti-Quietsch-Blech und passt beispielsweise zu Fahrzeugen von SKODA, VW und SEAT. Der angebotene Artikel wird unter anderem unter den Original Ersatzteilnummern bzw. Vergleichsnummern 3C0 698 151 E, 3C0 698 151 F, 7N0 698 151 A, 7N0 698 151 C, 7N0 698 151 D geführt.",
-                },
-                {
-                    "product_url": "https://www.autoteile-markt.de/shop/artikel/bremsbelagsatz-scheibenbremse-vorderachse-trw-gdb3206-14876062127a98860d7243cef15232f5",
-                    "title": "Bremsbelagsatz, Scheibenbremse Vorderachse TRW GDB3206",
-                    "image_url": "https://cdn.autoteile-markt.de/tecdoc/0161/0161gdb3206_550_500_75.webp",
-                    "price": "15,14 €",
-                    "seller_name": "N/A",
-                    "delivery_time": "1 - 7 Werktage",
-                    "description": "Das Produkt Bremsbelagsatz, Scheibenbremse des Herstellers TRW hat die Breite 91,6 mm. Der Artikel besitzt das Prüfzeichen E2 90R 01124/002, die Höhe lautet 64 mm und die Herstellereinschränkungen lauten SUMITOMO. Bremsbelagsatz, Scheibenbremse hat eine Dicke/Stärke von 15,5 mm und passt beispielsweise zu Fahrzeugen von KIA und MAZDA. Der angebotene Artikel wird unter anderem unter den Original Ersatzteilnummern bzw. Vergleichsnummern DCY0-33-23Z A, DCY0-33-23Z B, DCY03323Z, 0K30A3328Z, K0BA23328Z geführt.",
-                },
-                {
-                    "product_url": "https://www.autoteile-markt.de/shop/artikel/bremsbelagsatz-scheibenbremse-vorderachse-trw-gdb3273-bb4f6cce6aead69789e9d56eff1e3d7f",
-                    "title": "Bremsbelagsatz, Scheibenbremse Vorderachse TRW GDB3273",
-                    "image_url": "https://cdn.autoteile-markt.de/tecdoc/0161/0161gdb3273_550_500_75.webp",
-                    "price": "28,20 €",
-                    "seller_name": "N/A",
-                    "delivery_time": "1 - 3 Werktage",
-                    "description": "Das Produkt Bremsbelagsatz, Scheibenbremse des Herstellers TRW hat das Prüfzeichen E2 90R 01124/012. Die Herstellereinschränkungen lauten AKEBONO, die Breite beträgt 139,3 mm und die Höhe lautet 59,5 mm. Bremsbelagsatz, Scheibenbremse hat eine Dicke/Stärke von 14,8 mm und passt beispielsweise zu Fahrzeugen von INFINITI und NISSAN. Der angebotene Artikel wird unter anderem unter den Original Ersatzteilnummern bzw. Vergleichsnummern 41060-0P690, 41060-0P691, 41060-0P693, 41060-3Y690, 41060-60U90 geführt.",
-                },
-            ]
-        },
-        "search_parameters_used": {
-            "vin_recognized": "WVWZZZ3CZLE073029",
-            "kba_recognized": "0603/BRA",
-            "identified_part_type": "Bremsbelag",
-            "vehicle_model": {
-                "brand_model": "VW Passat B8 Variant (3G)",
-                "engine": "2.0 TDI",
-                "kba_id": "19080",
-                "url": "https://www.autoteile-markt.de/shop/q-lamp/vw-passat-b8-variant-(3g)-2.0-tdi-ersatzteile-fi19080",
-            },
-        },
-    }
+class PartPosition(str, Enum):
+    front = "front"
+    rear = "rear"
+
+
+class Brand(str, Enum):
+    RIDEX = "RIDEX"
+    Brembo = "Brembo"
+    ATE = "ATE"
+    Bosch = "Bosch"
+    Textar = "Textar"
+    Zimmermann = "Zimmermann"
+    Jurid = "Jurid"
+    Febi_Bilstein = "Febi Bilstein"
+    TRW = "TRW"
+    Meyle = "Meyle"
+
+
+class Product(BaseModel):
+    id: int
+    name: str
+    brand: Brand
+    price: float
+    position: PartPosition | None = None
+    description: str | None = None
+
+
+class SearchResponse(BaseModel):
+    results: list[Product]
+    total: int
+
+
+MOCK_PRODUCTS = [
+    Product(id=1, name="Front brake pads set", brand=Brand.RIDEX, price=49.99, position=PartPosition.front),
+    Product(id=2, name="Rear brake discs", brand=Brand.Brembo, price=89.99, position=PartPosition.rear),
+    Product(id=3, name="Oil filter", brand=Brand.Bosch, price=15.5),
+]
+
+
+@router.post("/", response_model=SearchResponse)
+async def search_parts(
+    search_code: str | None = Query(None, description="! *search_code* from Vehicle table"),
+    document: UploadFile | None = File(None, description="Optional STS document photo."),
+    query_text: str | None = Query(None, description="Free-text search for a part name."),
+    part_photo: UploadFile | None = File(None, description="Optional photo of a part."),
+    position: PartPosition | None = Query(None, description="Filter by part position."),
+    brand_filter: list[Brand] | None = Query(None, description="Filter by specific brands."),
+    price_min: float | None = Query(None, description="Minimum price filter."),
+    price_max: float | None = Query(None, description="Maximum price filter."),
+    page: int = Query(1, ge=1, description="Page number for pagination."),
+    limit: int = Query(10, ge=1, le=10, description="Number of results per page."),
+):
+    if not any([search_code, document, query_text, part_photo]):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="You must provide at least one of: search_code, document, query_text, or part_photo",
+        )
+
+    results = MOCK_PRODUCTS.copy()
+
+    if query_text:
+        results = [p for p in results if query_text.lower() in p.name.lower()]
+    if position:
+        results = [p for p in results if p.position == position]
+    if brand_filter:
+        results = [p for p in results if p.brand in brand_filter]
+    if price_min is not None:
+        results = [p for p in results if p.price >= price_min]
+    if price_max is not None:
+        results = [p for p in results if p.price <= price_max]
+
+    start = (page - 1) * limit
+    end = start + limit
+    paginated = results[start:end]
+
+    return SearchResponse(results=paginated, total=len(results))

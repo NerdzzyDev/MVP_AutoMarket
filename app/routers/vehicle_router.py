@@ -1,9 +1,12 @@
 # app/routers/vehicle_router.py
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Form, HTTPException, Path, UploadFile, status
+from loguru import logger
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.db import get_async_db as get_db
 from app.models.user import User
+from app.models.vehicle import Vehicle
 from app.routers.user_router import get_current_user
 from app.schemas.vehicle_schema import VehicleCreate, VehicleResponse
 from app.services.vehicle_service import VehicleService
@@ -13,36 +16,119 @@ router = APIRouter(prefix="/vehicles", tags=["vehicles"])
 
 @router.get("/", response_model=list[VehicleResponse])
 async def list_vehicles(db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
-    vehicles = await VehicleService.get_user_vehicles(db, current_user)
-    return vehicles
+    try:
+        vehicles = await VehicleService.get_user_vehicles(db, current_user)
+        logger.info(f"User {current_user.email} listed {len(vehicles)} vehicles")
+        return vehicles
+    except SQLAlchemyError as e:
+        logger.error(f"DB error while listing vehicles for {current_user.email}: {e}")
+        raise HTTPException(status_code=500, detail="Database error while fetching vehicles")
+    except Exception as e:
+        logger.exception(f"Unexpected error in list_vehicles for {current_user.email}: {e}")
+        raise HTTPException(status_code=500, detail="Unexpected error occurred")
 
 
 @router.post("/", response_model=VehicleResponse)
 async def add_vehicle(
     vehicle_data: VehicleCreate, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)
 ):
-    vehicle = await VehicleService.add_vehicle(db, current_user, vehicle_data)
-    return vehicle
+    try:
+        # создаём через сервис, теперь передаём search_code
+        vehicle = await VehicleService.add_vehicle(db, current_user, vehicle_data)
+        logger.info(f"User {current_user.email} added vehicle {vehicle.id}")
+        return vehicle
+    except SQLAlchemyError as e:
+        await db.rollback()
+        logger.error(f"DB error while adding vehicle for {current_user.email}: {e}")
+        raise HTTPException(status_code=500, detail="Database error while adding vehicle")
+    except Exception as e:
+        await db.rollback()
+        logger.exception(f"Unexpected error in add_vehicle for {current_user.email}: {e}")
+        raise HTTPException(status_code=500, detail="Unexpected error occurred")
 
 
 @router.delete("/{vehicle_id}")
 async def delete_vehicle(
-    vehicle_id: int, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)
+    vehicle_id: int = Path(...), db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)
 ):
-    return await VehicleService.delete_vehicle(db, current_user, vehicle_id)
+    try:
+        result = await VehicleService.delete_vehicle(db, current_user, vehicle_id)
+        logger.info(f"User {current_user.email} deleted vehicle {vehicle_id}")
+        return result
+    except HTTPException:
+        raise
+    except SQLAlchemyError as e:
+        await db.rollback()
+        logger.error(f"DB error while deleting vehicle {vehicle_id} for {current_user.email}: {e}")
+        raise HTTPException(status_code=500, detail="Database error while deleting vehicle")
+    except Exception as e:
+        await db.rollback()
+        logger.exception(f"Unexpected error in delete_vehicle for {current_user.email}: {e}")
+        raise HTTPException(status_code=500, detail="Unexpected error occurred")
 
 
 @router.patch("/{vehicle_id}/select", response_model=VehicleResponse)
 async def select_vehicle(
-    vehicle_id: int, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)
+    vehicle_id: int = Path(...), db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)
 ):
-    vehicle = await VehicleService.select_vehicle(db, current_user, vehicle_id)
-    return vehicle
+    try:
+        vehicle = await VehicleService.select_vehicle(db, current_user, vehicle_id)
+        logger.info(f"User {current_user.email} selected vehicle {vehicle_id}")
+        return vehicle
+    except HTTPException:
+        raise
+    except SQLAlchemyError as e:
+        await db.rollback()
+        logger.error(f"DB error while selecting vehicle {vehicle_id} for {current_user.email}: {e}")
+        raise HTTPException(status_code=500, detail="Database error while selecting vehicle")
+    except Exception as e:
+        await db.rollback()
+        logger.exception(f"Unexpected error in select_vehicle for {current_user.email}: {e}")
+        raise HTTPException(status_code=500, detail="Unexpected error occurred")
 
 
-@router.patch("/{vehicle_id}/select", response_model=VehicleResponse)
-async def select_vehicle(
-    vehicle_id: int, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)
+@router.post("/add-from-doc", response_model=VehicleResponse)
+async def add_vehicle_from_doc(
+    vin: str | None = Form(None, description="VIN or KBA code of the vehicle"),
+    search_code: str | None = Form(None, description="Optional vehicle search code extracted from document"),
+    document: UploadFile | None = None,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
-    vehicle = await VehicleService.select_vehicle(db, current_user, vehicle_id)
-    return vehicle
+    """
+    Add a vehicle by either:
+    - VIN/KBA code (`vin`)
+    - Or uploading a STS document (`document`) to extract vehicle data
+    Optional `search_code` can be provided to help searching parts.
+    """
+
+    if not vin and not document:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="You must provide either vin/kba or a document."
+        )
+
+    # Здесь можно добавить логику распознавания документа
+    # Пока мок: если есть документ, просто создаем vehicle с test VIN
+    try:
+        vehicle = Vehicle(
+            user_id=current_user.id,
+            vin=vin or "MOCK_VIN_FROM_DOC",
+            brand="MockBrand",
+            model="MockModel",
+            engine="MockEngine",
+            kba_code=vin or "MOCK_KBA",
+            search_code=search_code,
+        )
+        db.add(vehicle)
+        await db.commit()
+        await db.refresh(vehicle)
+        logger.info(f"User {current_user.email} added vehicle {vehicle.id} via doc or VIN")
+        return vehicle
+    except SQLAlchemyError as e:
+        await db.rollback()
+        logger.error(f"DB error while adding vehicle for {current_user.email}: {e}")
+        raise HTTPException(status_code=500, detail="Database error while adding vehicle")
+    except Exception as e:
+        await db.rollback()
+        logger.exception(f"Unexpected error while adding vehicle for {current_user.email}: {e}")
+        raise HTTPException(status_code=500, detail="Unexpected error occurred")
