@@ -1,10 +1,11 @@
-# app/core/db.py
+# --- Импорт всех моделей, чтобы Alembic их видел ---
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import declarative_base, sessionmaker
 
 from app.core.config import settings
 
 Base = declarative_base()
+
 
 # --- Асинхронный движок ---
 engine = create_async_engine(

@@ -11,57 +11,77 @@ from app.routers.user_router import get_current_user
 router = APIRouter(prefix="/favorites", tags=["favorites"])
 
 
-@router.post("/{product_id}")
+@router.post("/")
 async def add_favorite(
-    product_id: int = Path(...),
+    title: str = Form(...),
+    brand: str = Form(""),
+    price: str = Form(""),
+    image_url: str = Form(""),
+    product_url: str = Form(...),
+    delivery_time: str = Form(""),
+    description: str = Form(""),
     vin: str | None = Form(None),
     user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_async_db),
 ):
     try:
-        product = await session.get(Product, product_id)
-        if not product:
-            raise HTTPException(status_code=404, detail="Product not found")
+        # Проверяем — есть ли уже такой товар в БД
+        result = await session.execute(select(Product).where(Product.product_url == product_url))
+        product = result.scalar_one_or_none()
 
+        # Если нет — создаём новый
+        if not product:
+            product = Product(
+                title=title,
+                brand=brand,
+                price=price,
+                image_url=image_url,
+                product_url=product_url,
+                delivery_time=delivery_time,
+                description=description,
+            )
+            session.add(product)
+            await session.flush()  # чтобы получить id до коммита
+
+        # Проверяем, не добавлен ли уже в избранное
         existing = await session.execute(
-            select(Favorite).where(Favorite.user_id == user.id, Favorite.product_id == product_id)
+            select(Favorite).where(Favorite.user_id == user.id, Favorite.product_id == product.id)
         )
         if existing.scalar_one_or_none():
             raise HTTPException(status_code=400, detail="Already in favorites")
 
-        fav = Favorite(user_id=user.id, product_id=product_id, vin=vin)
+        # Создаём избранное
+        fav = Favorite(user_id=user.id, product_id=product.id, vin=vin)
         session.add(fav)
         await session.commit()
         await session.refresh(fav)
 
-        logger.info(f"User {user.email} added product {product_id} to favorites (vin={vin})")
+        logger.info(f"User {user.email} added product {product.id} ({product.title}) to favorites")
 
         return {
             "id": fav.id,
             "vin": fav.vin,
             "product": {
+                "id": product.id,
                 "title": product.title,
+                "price": product.price,
                 "product_url": product.product_url,
                 "image_url": product.image_url,
-                "price": product.price,
-                "seller_name": getattr(product, "seller_name", "N/A"),
-                "delivery_time": getattr(product, "delivery_time", None),
-                "description": getattr(product, "description", ""),
+                "brand": product.brand,
+                "delivery_time": product.delivery_time,
+                "description": product.description,
             },
         }
 
-    except HTTPException:
-        raise
-
     except SQLAlchemyError as e:
         await session.rollback()
-        logger.error(f"Database error while adding favorite for user {user.email}: {e}")
-        raise HTTPException(status_code=500, detail="Database error while adding to favorites")
+        logger.error(f"DB error while adding favorite for {user.email}: {e}")
+        raise HTTPException(status_code=500, detail="Database error")
 
     except Exception as e:
         await session.rollback()
-        logger.exception(f"Unexpected error in add_favorite for user {user.email}: {e}")
-        raise HTTPException(status_code=500, detail="Unexpected error occurred while adding to favorites")
+        logger.exception(f"Unexpected error while adding favorite: {e}")
+        raise HTTPException(status_code=500, detail="Unexpected error occurred")
 
 
 @router.get("/")

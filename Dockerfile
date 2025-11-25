@@ -13,6 +13,9 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Копируем весь код
 COPY . .
 
+COPY alembic_migrate.sh /alembic_migrate.sh
+RUN chmod +x /alembic_migrate.sh
+
 # Указываем порт uvicorn
 EXPOSE 8081
 
