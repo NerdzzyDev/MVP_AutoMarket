@@ -49,8 +49,9 @@ class Favorite(Base):
     product_id = Column(Integer, ForeignKey("products.id", ondelete="CASCADE"))
     vin = Column(String(64), nullable=True)  # Привязка к машине пользователя
 
-    product = relationship("Product")
-    user = relationship("User")
+    product = relationship("Product", back_populates="favorites", lazy="selectin")
+    user = relationship("User", back_populates="favorites", lazy="selectin")
+
 
 
 class CartItem(Base):
@@ -62,5 +63,5 @@ class CartItem(Base):
     vin = Column(String(64), nullable=True)  # Привязка к машине пользователя
     quantity = Column(Integer, default=1)
 
-    product = relationship("Product")
-    user = relationship("User")
+    product = relationship("Product", back_populates="cart_items", lazy="selectin")
+    user = relationship("User", back_populates="cart_items", lazy="selectin")

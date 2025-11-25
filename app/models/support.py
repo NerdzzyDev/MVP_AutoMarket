@@ -15,9 +15,13 @@ class SupportTicket(Base):
     status = Column(String(64), default="open")  # open / in_progress / resolved / closed
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
-    user = relationship("User", back_populates="tickets")
-    messages = relationship("SupportMessage", back_populates="ticket", cascade="all, delete-orphan")
-
+    user = relationship("User", back_populates="tickets", lazy="selectin")
+    messages = relationship(
+        "SupportMessage",
+        back_populates="ticket",
+        lazy="selectin",  # ✅ async-safe
+        cascade="all, delete-orphan"
+    )
 
 class SupportMessage(Base):
     __tablename__ = "support_messages"
@@ -29,4 +33,4 @@ class SupportMessage(Base):
     attachment_url = Column(String(512), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
-    ticket = relationship("SupportTicket", back_populates="messages")
+    ticket = relationship("SupportTicket", back_populates="messages", lazy="selectin")
