@@ -20,6 +20,11 @@ services:
     restart: unless-stopped
     ports:
       - "8081:8081"
+    volumes:
+      - ./alembic:/app/alembic   
+      - ./app:/app/app   
+      - ./:/app       # монтируем код приложения
+      - ./tests:/app/tests      # монтируем тесты
     depends_on:
       - db
     environment:
@@ -29,6 +34,7 @@ services:
       DB_PASS: postgres
       DB_NAME: autoteile_db
     entrypoint: ["/alembic_migrate.sh"]
+    working_dir: /app
 
 volumes:
   db_data:
