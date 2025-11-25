@@ -5,13 +5,16 @@ from logging.config import fileConfig
 from sqlalchemy import engine_from_config, pool
 
 from alembic import context
+from app.core.config import settings
 
 # --- Добавляем корень проекта в sys.path ---
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 # --- Импортируем настройки и Base ---
-from app.core.config import settings
 from app.core.db import Base
+from app.models.support import SupportMessage, SupportTicket  # noqa: F401
+from app.models.user import CartItem, Favorite, Product, User  # noqa: F401
+from app.models.vehicle import Vehicle  # noqa: F401
 
 # --- Alembic Config ---
 config = context.config

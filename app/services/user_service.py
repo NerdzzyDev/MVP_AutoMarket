@@ -3,6 +3,7 @@ from fastapi import HTTPException
 from passlib.context import CryptContext
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.models.user import User
 from app.models.vehicle import Vehicle
@@ -13,7 +14,11 @@ pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 class UserService:
     @staticmethod
     async def get_user_by_email(db: AsyncSession, email: str):
-        result = await db.execute(select(User).where(User.email == email))
+        result = await db.execute(
+            select(User)
+            .options(selectinload(User.vehicles))  # загружаем машины сразу
+            .where(User.email == email)
+        )
         return result.scalars().first()
 
     @staticmethod
@@ -35,6 +40,7 @@ class UserService:
                 model=user_data.model,
                 engine=user_data.engine,
                 kba_code=user_data.kba_code,
+                search_code=user_data.search_code,
             )
             db.add(vehicle)
             await db.commit()
@@ -70,15 +76,15 @@ class UserService:
         """
         updated = False
 
-        if getattr(update_data, "full_name", None):
+        if update_data.get("full_name") or getattr(update_data, "full_name", None):
             user.full_name = update_data.full_name
             updated = True
 
-        if getattr(update_data, "email", None):
+        if update_data.get("full_name") or getattr(update_data, "email", None):
             user.email = update_data.email
             updated = True
 
-        if getattr(update_data, "password", None):
+        if update_data.get("full_name") or getattr(update_data, "password", None):
             if len(update_data.password.encode("utf-8")) > 72:
                 raise HTTPException(status_code=400, detail="Password too long (max 72 bytes).")
             user.password_hash = pwd_context.hash(update_data.password)

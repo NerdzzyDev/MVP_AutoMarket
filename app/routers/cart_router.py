@@ -50,44 +50,82 @@ async def get_cart(
 
 @router.post("/add")
 async def add_to_cart(
-    product_id: int = Form(...),
+    title: str = Form(...),
+    brand: str = Form(""),
+    price: str = Form(""),
+    image_url: str = Form(""),
+    product_url: str = Form(...),
+    delivery_time: str = Form(""),
+    description: str = Form(""),
+    vin: str | None = Form(None),
     quantity: int = Form(1),
     user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_async_db),
 ):
     try:
-        product = await session.get(Product, product_id)
-        if not product:
-            raise HTTPException(status_code=404, detail="Product not found")
+        # Проверяем — есть ли товар с таким URL
+        result = await session.execute(select(Product).where(Product.product_url == product_url))
+        product = result.scalar_one_or_none()
 
+        # Если нет — создаём новый товар
+        if not product:
+            product = Product(
+                title=title,
+                brand=brand,
+                price=price,
+                image_url=image_url,
+                product_url=product_url,
+                delivery_time=delivery_time,
+                description=description,
+            )
+            session.add(product)
+            await session.flush()  # чтобы получить ID
+
+        # Проверяем, есть ли уже этот товар в корзине
         existing = await session.execute(
-            select(CartItem).where(CartItem.user_id == user.id, CartItem.product_id == product_id)
+            select(CartItem).where(CartItem.user_id == user.id, CartItem.product_id == product.id)
         )
         cart_item = existing.scalar_one_or_none()
 
         if cart_item:
             cart_item.quantity += quantity
-            logger.info(f"User {user.email} increased quantity of product {product_id} to {cart_item.quantity}")
+            logger.info(f"User {user.email} increased qty for product {product.id} to {cart_item.quantity}")
         else:
-            cart_item = CartItem(user_id=user.id, product_id=product_id, quantity=quantity)
+            cart_item = CartItem(
+                user_id=user.id,
+                product_id=product.id,
+                quantity=quantity,
+                vin=vin,
+            )
             session.add(cart_item)
-            logger.info(f"User {user.email} added product {product_id} (qty={quantity}) to cart")
+            logger.info(f"User {user.email} added product {product.id} ({product.title}) to cart")
 
         await session.commit()
         await session.refresh(cart_item)
-        return {"id": cart_item.id, "quantity": cart_item.quantity}
 
-    except HTTPException:
-        raise
+        return {
+            "id": cart_item.id,
+            "quantity": cart_item.quantity,
+            "product": {
+                "id": product.id,
+                "title": product.title,
+                "price": product.price,
+                "product_url": product.product_url,
+                "image_url": product.image_url,
+                "brand": product.brand,
+                "delivery_time": product.delivery_time,
+                "description": product.description,
+            },
+        }
 
     except SQLAlchemyError as e:
         await session.rollback()
-        logger.error(f"Database error while adding product {product_id} for user {user.email}: {e}")
-        raise HTTPException(status_code=500, detail="Database error while adding product to cart")
+        logger.error(f"DB error while adding product {product_url} for {user.email}: {e}")
+        raise HTTPException(status_code=500, detail="Database error while adding to cart")
 
     except Exception as e:
         await session.rollback()
-        logger.exception(f"Unexpected error in add_to_cart for user {user.email}: {e}")
+        logger.exception(f"Unexpected error in add_to_cart for {user.email}: {e}")
         raise HTTPException(status_code=500, detail="Unexpected error occurred while adding to cart")
 
 

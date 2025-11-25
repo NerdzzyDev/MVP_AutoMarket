@@ -14,9 +14,15 @@ class User(Base):
     is_phantom = Column(Boolean, default=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
-    vehicles = relationship("Vehicle", back_populates="user")
-    favorites = relationship("Favorite", back_populates="user", cascade="all, delete-orphan")
-    cart_items = relationship("CartItem", back_populates="user", cascade="all, delete-orphan")
+    vehicles = relationship(
+        "Vehicle",
+        back_populates="user",
+        lazy="selectin",  # ✅ async-safe загрузка
+        cascade="all, delete-orphan",
+    )
+    favorites = relationship("Favorite", back_populates="user", lazy="selectin", cascade="all, delete-orphan")
+    cart_items = relationship("CartItem", back_populates="user", lazy="selectin", cascade="all, delete-orphan")
+    tickets = relationship("SupportTicket", back_populates="user", lazy="selectin", cascade="all, delete-orphan")
 
 
 class Product(Base):
@@ -31,8 +37,8 @@ class Product(Base):
     delivery_time = Column(String(128))
     description = Column(String)
 
-    favorites = relationship("Favorite", back_populates="product", cascade="all, delete-orphan")
-    cart_items = relationship("CartItem", back_populates="product", cascade="all, delete-orphan")
+    favorites = relationship("Favorite", back_populates="product", lazy="selectin", cascade="all, delete-orphan")
+    cart_items = relationship("CartItem", back_populates="product", lazy="selectin", cascade="all, delete-orphan")
 
 
 class Favorite(Base):

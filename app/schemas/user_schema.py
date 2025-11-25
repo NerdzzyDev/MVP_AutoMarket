@@ -2,16 +2,16 @@ from datetime import datetime
 
 from pydantic import BaseModel, EmailStr
 
+from app.schemas.vehicle_schema import VehicleResponse
+
 
 class UserCreate(BaseModel):
     email: EmailStr
     password: str
-    phone: str | None = None
 
 
 class UserUpdate(BaseModel):
     email: EmailStr | None = None
-    phone: str | None = None
     password: str | None = None
 
 
@@ -23,6 +23,7 @@ class UserRegister(BaseModel):
     model: str | None = None
     engine: str | None = None
     kba_code: str | None = None
+    search_code: str | None = None
 
 
 class UserLogin(BaseModel):
@@ -38,6 +39,7 @@ class UserResponse(BaseModel):
     id: int
     email: EmailStr
     created_at: datetime
+    vehicles: list[VehicleResponse] = []
 
     class Config:
         from_attributes = True
