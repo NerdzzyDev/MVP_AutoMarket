@@ -141,8 +141,9 @@ async def add_vehicle_from_doc(
 
 @router.post("/by-kba", response_model=KBAVehicleInfo)
 async def get_vehicle_by_kba(
-    hsn: str = Form(..., min_length=4, max_length=4, regex=r"^\d{4}$"),
-    tsn: str = Form(..., min_length=1, max_length=3, regex=r"^[A-Za-z0-9]+$")
+    hsn: str = Form(..., min_length=4, max_length=4, pattern=r"^\d{4}$", description="HSN (4 digits)"),
+    tsn: str = Form(..., min_length=1, max_length=3, pattern=r"^[A-Za-z0-9]+$", description="TSN (1–3 symbols)")
+
 ):
     try:
         async with aiohttp.ClientSession() as session:
