@@ -11,6 +11,11 @@ from app.routers.user_router import get_current_user
 from app.schemas.vehicle_schema import VehicleCreate, VehicleResponse
 from app.services.vehicle_service import VehicleService
 
+
+import aiohttp
+from app.agents_tools.parser import AutoteileMarktAgent
+from app.schemas.kba import KBAVehicleInfo
+
 router = APIRouter(prefix="/vehicles", tags=["vehicles"])
 
 
@@ -132,3 +137,40 @@ async def add_vehicle_from_doc(
         await db.rollback()
         logger.exception(f"Unexpected error while adding vehicle for {current_user.email}: {e}")
         raise HTTPException(status_code=500, detail="Unexpected error occurred")
+
+
+@router.post("/by-kba", response_model=KBAVehicleInfo)
+async def get_vehicle_by_kba(
+    hsn: str = Form(..., min_length=4, max_length=4, regex=r"^\d{4}$"),
+    tsn: str = Form(..., min_length=1, max_length=3, regex=r"^[A-Za-z0-9]+$")
+):
+    try:
+        async with aiohttp.ClientSession() as session:
+            agent = AutoteileMarktAgent(session)
+            result = await agent.fetch_vehicle(hsn.strip(), tsn.upper().strip())
+
+        if not result:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Vehicle not found by given HSN/TSN"
+            )
+
+        if not result.get("kba_id"):
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="KBA ID not detected in response"
+            )
+
+        return result
+
+    except aiohttp.ClientError:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Service autoteile-markt.de is unavailable"
+        )
+
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Unexpected error: {str(e)}"
+        )
