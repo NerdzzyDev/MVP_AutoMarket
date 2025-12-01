@@ -13,7 +13,7 @@ from app.services.vehicle_service import VehicleService
 
 
 import aiohttp
-from app.agents_tools.parser import AutoteileMarktAgent
+from app.agents_tools.get_car_model import AutoteileMarktAgent
 from app.schemas.kba import KBAVehicleInfo
 
 router = APIRouter(prefix="/vehicles", tags=["vehicles"])
