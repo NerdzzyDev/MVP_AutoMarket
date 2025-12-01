@@ -10,6 +10,18 @@ class Settings(BaseSettings):
     DB_PASS: str = "postgres"
     DB_NAME: str = "autoteile_db"
 
+
+
+    ocr_space_api_key: str | None = None
+    redis_url: str | None = None
+    openai_api_key: str | None = None
+    google_application_credentials: str | None = None
+
+    minio_endpoint: str | None = None
+    minio_access_key: str | None = None
+    minio_secret_key: str | None = None
+    minio_bucket: str | None = None
+
     # --- JWT ---
     JWT_SECRET: str = "super_secret_key"  # лучше задать в .env
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24

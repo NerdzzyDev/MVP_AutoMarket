@@ -2,6 +2,8 @@ from fastapi import FastAPI
 
 from app.routers import cart_router, favorites_router, search_router, support_router, user_router, vehicle_router
 
+from app.routers.v1 import tests_endpoints
+
 from fastapi.middleware.cors import CORSMiddleware
 
 
@@ -23,3 +25,6 @@ app.include_router(vehicle_router.router)
 app.include_router(favorites_router.router)
 app.include_router(cart_router.router)
 app.include_router(support_router.router)
+
+# ai
+app.include_router(tests_endpoints.router)
