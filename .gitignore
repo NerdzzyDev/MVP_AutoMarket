@@ -209,3 +209,9 @@ __marimo__/
 
 secrets/fix-autoscan-hub-463814-a285a546da5f.json
 secrets/
+
+
+# Qdrant snapshots
+*.snapshot
+qdrant_storage/
+qdrant_storage:/
