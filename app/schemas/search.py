@@ -43,6 +43,7 @@ class SearchParametersUsed(BaseModel):
     kba_recognized: Optional[str] = None
     identified_part_type: Optional[str] = None
     vehicle_model: Optional[VehicleModel] = None
+    total_products: Optional[int] = 0
 
 
 class Product(BaseModel):

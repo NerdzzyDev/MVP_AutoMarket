@@ -7,7 +7,7 @@ from app.agents_tools.parser import AutoteileMarktParserAgent
 from app.agents_tools.part_text import TextPartIdentifierAgent
 from app.schemas.ai_schemas import OEMRequest, QueryRequest
 from app.utils.llm_buffer import temp_storage
-from fastapi import APIRouter, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, File, Form, HTTPException, UploadFile, Query
 from loguru import logger
 
 router = APIRouter(prefix="/tools", tags=["Agent Tools"])
@@ -49,16 +49,16 @@ async def query_llm_with_image(input: str = Form(...), image: UploadFile = File(
 
 
 @router.post("/identify/text", summary="Identify part type from text")
-async def identify_part_from_text(text_query: str):
+async def identify_part_from_text(
+    text_query: str,
+    position_flag: str | None = Query(None, description="Optional position hint: 'front' or 'back'")
+):
     """
     Identify a car part type based on text description.
-
-    Source: Rule-based agent
-    Input: text_query: str
-    Output: { part_type: str }
+    Adds position hint if provided.
     """
     agent = TextPartIdentifierAgent()
-    part_type = await agent.identify_part_type(text_query)
+    part_type = await agent.normalize_query(text_query, position_flag)
     if not part_type:
         raise HTTPException(status_code=500, detail="Failed to identify part type")
     return {"part_type": part_type}

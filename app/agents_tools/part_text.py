@@ -3,7 +3,6 @@ import os
 from loguru import logger
 from openai import AsyncOpenAI
 
-
 class TextPartIdentifierAgent:
     def __init__(self):
         api_key = os.getenv("OPENAI_API_KEY")
@@ -11,19 +10,31 @@ class TextPartIdentifierAgent:
             logger.error("OPENAI_API_KEY not set!")
         self.client = AsyncOpenAI(api_key=api_key)
 
-    async def normalize_query(self, text_query: str) -> str:
-        """Normalize and translate part type query for fuzzy matching."""
+    async def normalize_query(self, text_query: str, position_flag: str | None = None) -> str:
+        """
+        Normalize automotive part name for fuzzy matching.
+        If position_flag is given ('front'/'back'), include the German hint in the output.
+        Returns normalized string with words joined by '+'.
+        """
+        position_hint = ""
+        if position_flag:
+            if position_flag.lower() == "front":
+                position_hint = " Vorderachse"
+            elif position_flag.lower() == "back":
+                position_hint = " Hinterachse"
+
         prompt = (
             "You are a helpful assistant. Your task is to normalize an automotive part name "
             "so it can be matched with German product titles.\n\n"
             "Remove brand names, fix spelling errors, and if in English, translate to German.\n"
+            f"Include the position hint if provided: '{position_hint.strip()}'\n"
             "Return only 2-4 normalized words in German. No explanations.\n\n"
             f"Query: {text_query}\n\n"
             "Output:"
         )
 
         try:
-            logger.debug(f"Normalizing query: {text_query}")
+            logger.debug(f"Normalizing query: {text_query} with position_flag={position_flag}")
             response = await self.client.chat.completions.create(
                 model="gpt-4o-mini",
                 messages=[{"role": "user", "content": prompt}],
@@ -31,13 +42,13 @@ class TextPartIdentifierAgent:
                 max_tokens=20,
             )
             normalized = response.choices[0].message.content.strip()
+            # заменяем пробелы на +
+            normalized = "+".join(normalized.split())
             logger.info(f"Normalized query: {normalized}")
             return normalized
         except Exception as e:
             logger.error(f"Error normalizing query: {e}")
-            return text_query  # fallback
-
-
+            return "+".join(text_query.split())  # fallback
 ### --- OLLAMA 3.1 --- ###
 # # app/agents/part_text.py
 # import asyncio

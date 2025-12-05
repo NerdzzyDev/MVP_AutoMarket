@@ -139,6 +139,26 @@ class AutoteileMarktParserAgent:
         raw_key = f"autoteile:{oem_number}:{max_products}"
         return hashlib.sha256(raw_key.encode()).hexdigest()
 
+    async def get_total_products(self, session, oem_number, model_link=None):
+        """Возвращает общее количество товаров по OEM"""
+        if model_link:
+            url = f"https://www.autoteile-markt.de/shop/q-{oem_number}/{model_link}"
+        else:
+            url = f"https://www.autoteile-markt.de/shop/q-{oem_number}/"
+
+        html = await self.make_request(session, url)
+        if not html:
+            return 0
+
+        soup = BeautifulSoup(html, "lxml")
+        result_hit = soup.select_one("div.col-6.resultHits > b")
+        if not result_hit:
+            return 0
+
+        # Извлекаем число и убираем точки
+        total_str = result_hit.get_text(strip=True).split(" ")[0].replace(".", "")
+        return int(total_str) if total_str.isdigit() else 0
+
     async def search_parts_by_oem(self, oem_number, max_products=10, model_link=None):
         cache_key = self.generate_cache_key(oem_number, max_products)
 
