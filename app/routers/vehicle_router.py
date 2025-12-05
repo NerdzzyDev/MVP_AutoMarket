@@ -141,9 +141,20 @@ async def add_vehicle_from_doc(
 
 @router.post("/by-kba", response_model=KBAVehicleInfo)
 async def get_vehicle_by_kba(
-    hsn: str = Form(..., min_length=4, max_length=4, pattern=r"^\d{4}$", description="HSN (4 digits)"),
-    tsn: str = Form(..., min_length=1, max_length=3, pattern=r"^[A-Za-z0-9]+$", description="TSN (1–3 symbols)")
-
+    hsn: str = Form(
+        ...,
+        min_length=4,
+        max_length=4,
+        pattern=r"^\d{4}$",
+        description="HSN (4 digits)",
+    ),
+    tsn: str = Form(
+        ...,
+        min_length=1,
+        max_length=3,
+        pattern=r"^[A-Za-z0-9]+$",
+        description="TSN (1–3 symbols)",
+    ),
 ):
     try:
         async with aiohttp.ClientSession() as session:
@@ -153,25 +164,33 @@ async def get_vehicle_by_kba(
         if not result:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail="Vehicle not found by given HSN/TSN"
+                detail="Vehicle not found by given HSN/TSN",
             )
 
         if not result.get("kba_id"):
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                detail="KBA ID not detected in response"
+                detail="KBA ID not detected in response",
             )
 
-        return result
+        # Явно мапим в Pydantic-модель (чтобы не зависеть от лишних ключей в dict)
+        return KBAVehicleInfo(
+            brand=result.get("brand"),
+            model=result.get("model"),
+            engine=result.get("engine"),
+            kba_id=result.get("kba_id"),
+            url=result.get("url"),
+            search_code=result.get("search_code"),
+        )
 
     except aiohttp.ClientError:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Service autoteile-markt.de is unavailable"
+            detail="Service autoteile-markt.de is unavailable",
         )
 
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Unexpected error: {str(e)}"
+            detail=f"Unexpected error: {str(e)}",
         )
