@@ -9,17 +9,19 @@ class PartPosition(str, Enum):
     rear = "rear"
 
 
+
 class Brand(str, Enum):
-    RIDEX = "RIDEX"
-    Brembo = "Brembo"
-    ATE = "ATE"
-    Bosch = "Bosch"
-    Textar = "Textar"
-    Zimmermann = "Zimmermann"
-    Jurid = "Jurid"
-    Febi_Bilstein = "Febi Bilstein"
-    TRW = "TRW"
-    Meyle = "Meyle"
+    RIDEX = "RIDEX"              # ridex
+    Brembo = "Brembo"           # brembo
+    ATE = "ATE"                 # ate
+    Bosch = "Bosch"             # bosch
+    Textar = "Textar"           # textar
+    Zimmermann = "Zimmermann"   # zimmermann
+    Jurid = "Jurid"             # jurid
+    Febi_Bilstein = "Febi Bilstein"  # febi-bilstein
+    TRW = "TRW"                 # trw
+    Meyle = "Meyle"             # meyle
+
 
 
 class PartType(str, Enum):

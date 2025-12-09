@@ -31,42 +31,94 @@ def extract_relevant_block(text: str, max_lines: int = 12) -> str:
     return text
 
 
+# def extract_vin_kba_from_text(text: str) -> dict:
+#     """
+#     Извлекаем VIN, HSN и TSN из OCR-текста.
+#     VIN через регулярку, HSN из второй строки, TSN — из первой строки (4 цифры).
+#     """
+#     print("Начало парсинга текста OCR")
+
+#     lines = [line.strip() for line in text.splitlines() if line.strip()]
+#     print(f"Всего строк после очистки: {len(lines)}")
+
+#     vin = None
+#     hsn = None
+#     tsn = None
+
+#     # TSN ищем в первой строке (4 цифры)
+#     if lines:
+#         numbers = re.findall(r"\b\d{4}\b", lines[0])
+#         if len(numbers) >= 2:
+#             tsn = numbers[1]  # берём второе число, а не первое (2020)
+#             print(f"TSN найден: {tsn}")
+
+#     # HSN из второй строки (только буквы)
+#     if len(lines) >= 2:
+#         hsn_match = re.match(r"([A-Z]+)", lines[1])
+#         if hsn_match:
+#             hsn = hsn_match.group(1)
+#             print(f"HSN найден: {hsn}")
+
+#     # VIN по стандартному паттерну
+#     vin_pattern = r"\b([A-HJ-NPR-Z0-9]{17})\b"
+#     vin_match = re.search(vin_pattern, text)
+#     if vin_match:
+#         vin = vin_match.group(1)
+#         print(f"VIN найден: {vin}")
+
+#     result = {
+#         "vin": vin,
+#         "kba": {
+#             "hsn": hsn,
+#             "tsn": tsn,
+#         },
+#     }
+
+#     print(f"Результат парсинга: {result}")
+#     return result
+
 def extract_vin_kba_from_text(text: str) -> dict:
     """
-    Извлекаем VIN, HSN и TSN из OCR-текста.
-    VIN через регулярку, HSN из второй строки, TSN — из первой строки (4 цифры).
+    Извлекает только VIN и строку KBA формата:
+        0603 BRA001523
+    Возвращает:
+        hsn = "0603"
+        tsn = "BRA"
     """
-    print("Начало парсинга текста OCR")
+    logger.info("Начало парсинга текста OCR")
 
     lines = [line.strip() for line in text.splitlines() if line.strip()]
-    print(f"Всего строк после очистки: {len(lines)}")
+    logger.debug("OCR строки:\n" + "\n".join(lines))
 
     vin = None
     hsn = None
     tsn = None
 
-    # TSN ищем в первой строке (4 цифры)
-    if lines:
-        numbers = re.findall(r"\b\d{4}\b", lines[0])
-        if len(numbers) >= 2:
-            tsn = numbers[1]  # берём второе число, а не первое (2020)
-            print(f"TSN найден: {tsn}")
-
-    # HSN из второй строки (только буквы)
-    if len(lines) >= 2:
-        hsn_match = re.match(r"([A-Z]+)", lines[1])
-        if hsn_match:
-            hsn = hsn_match.group(1)
-            print(f"HSN найден: {hsn}")
-
-    # VIN по стандартному паттерну
-    vin_pattern = r"\b([A-HJ-NPR-Z0-9]{17})\b"
-    vin_match = re.search(vin_pattern, text)
+    # --- VIN по паттерну ---
+    vin_match = re.search(r"\b([A-HJ-NPR-Z0-9]{17})\b", text)
     if vin_match:
         vin = vin_match.group(1)
-        print(f"VIN найден: {vin}")
+        logger.debug(f"VIN найден: {vin}")
 
-    result = {
+    # --- Ищем KBA строго по строке вида "0603 BRA001523" ---
+    # логика:
+    # - первые 4 символа: цифры
+    # - пробел
+    # - вторая часть: буквы/цифры длиной >= 3
+    kba_pattern = re.compile(r"\b([0-9]{4})\b\s+([A-Z0-9]{3,})")
+
+    for line in lines:
+        m = kba_pattern.search(line)
+        if m:
+            raw_hsn, raw_tsn_full = m.groups()
+            hsn = raw_hsn
+            tsn = raw_tsn_full[:3]   # первые три символа, как и требуется
+            logger.debug(f"KBA найден: строка='{line}', hsn={hsn}, tsn={tsn}")
+            break
+
+    logger.info(f"Результат парсинга: vin={vin}, hsn={hsn}, tsn={tsn}")
+
+    return {
         "vin": vin,
         "kba": {
             "hsn": hsn,
@@ -74,8 +126,6 @@ def extract_vin_kba_from_text(text: str) -> dict:
         },
     }
 
-    print(f"Результат парсинга: {result}")
-    return result
 
 
 class SparrowOCRAgent:

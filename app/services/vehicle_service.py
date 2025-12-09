@@ -21,6 +21,7 @@ class VehicleService:
             model=vehicle_data.model,
             engine=vehicle_data.engine,
             kba_code=vehicle_data.kba_code,
+            search_code=vehicle_data.search_code
         )
         db.add(vehicle)
         await db.commit()

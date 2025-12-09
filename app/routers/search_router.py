@@ -95,9 +95,9 @@ MOCK_SEARCH_PARAMETERS = SearchParametersUsed(
 @router.post("/", response_model=SearchResponse)
 async def search_parts(
     search_code: str | None = Query(None, description="! *search_code* from Vehicle table"),
-    document: UploadFile | None = File(None, description="Optional STS document photo."),
+    #document: UploadFile | None = File(None, description="Optional STS document photo."),
     query_text: str | None = Query(None, description="Free-text search for a part name."),
-    part_photo: UploadFile | None = File(None, description="Optional photo of a part."),
+    #part_photo: UploadFile | None = File(None, description="Optional photo of a part."),
     position: PartPosition | None = Query(None, description="Filter by part position."),
     brand_filter: list[Brand] | None = Query(None, description="Filter by specific brands."),
     price_min: float | None = Query(None, description="Minimum price filter."),
@@ -116,12 +116,13 @@ async def search_parts(
     orchestrator = PartSearchOrchestrator()
     # Передаем фильтры прямо в оркестратор
     return await orchestrator.search(
+        search_code=search_code,
         query_text=query_text,
         position_flag=position,
         max_products=limit,
         min_price=price_min,
         max_price=price_max,
-        # brand_filter=brand_filter  # если добавим фильтр по бренду внутри orchestrator
+        brand_filter=brand_filter  # если добавим фильтр по бренду внутри orchestrator
     )
 # @router.post("/", response_model=SearchResponse)
 # async def search_parts(

@@ -5,7 +5,7 @@ import os
 import redis.asyncio as redis
 
 REDIS_URL = os.getenv("REDIS_URL", "redis://redis:6379")  # ✅ только один раз порт
-CACHE_TTL = 60 * 60 * 24  # 24 часа
+CACHE_TTL = 60 * 60 * 24 * 30  # 24 часа
 
 redis_client = redis.Redis.from_url(REDIS_URL, decode_responses=True)
 

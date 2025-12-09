@@ -10,6 +10,9 @@ from app.models.vehicle import Vehicle
 from app.routers.user_router import get_current_user
 from app.schemas.vehicle_schema import VehicleCreate, VehicleResponse
 from app.services.vehicle_service import VehicleService
+from fastapi import APIRouter, File, Form, HTTPException, UploadFile, Query
+from app.agents_tools.ocr import GoogleVisionOCRAgent, SparrowOCRAgent
+
 
 
 import aiohttp
@@ -92,51 +95,104 @@ async def select_vehicle(
         raise HTTPException(status_code=500, detail="Unexpected error occurred")
 
 
-@router.post("/add-from-doc", response_model=VehicleResponse)
-async def add_vehicle_from_doc(
-    vin: str | None = Form(None, description="VIN or KBA code of the vehicle"),
-    search_code: str | None = Form(None, description="Optional vehicle search code extracted from document"),
-    document: UploadFile | None = None,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+@router.post("/identify/ocr-kba", response_model=KBAVehicleInfo, summary="Identify vehicle from document via OCR + KBA lookup")
+async def identify_vehicle_from_ocr(
+    file: UploadFile = File(..., description="Photo/scan of registration document"),
 ):
     """
-    Add a vehicle by either:
-    - VIN/KBA code (`vin`)
-    - Or uploading a STS document (`document`) to extract vehicle data
-    Optional `search_code` can be provided to help searching parts.
+    1) Принимает только изображение.
+    2) Делает OCR (Google Vision → Sparrow fallback).
+    3) Из текста вытаскивает VIN + HSN/TSN.
+    4) По HSN/TSN ходит в AutoteileMarkt (как /by-kba).
+    5) Возвращает KBAVehicleInfo (brand, model, engine, kba_id, url, search_code).
+
+    Если:
+      - OCR не смог вытащить HSN/TSN → 422
+      - По KBA ничего не нашли → 404
+      - В ответе нет kba_id → 422
     """
 
-    if not vin and not document:
+    # --- 1. Читаем картинку ---
+    image_bytes = await file.read()
+    logger.info(f"[OCR+KBA] Received file '{file.filename}' for vehicle identification")
+
+    # --- 2. OCR: Google → Sparrow fallback (логика как в /identify/ocr) ---
+    gv_agent = GoogleVisionOCRAgent()
+    reserve_agent = SparrowOCRAgent()
+
+    try:
+        ocr_result = await gv_agent.extract_vehicle_data(image_bytes)
+        if not ocr_result:
+            raise Exception("Empty result from GoogleVisionOCRAgent")
+        logger.info(f"[OCR][Google] Result: {ocr_result}")
+    except Exception as err:
+        logger.warning(f"[OCR][Google] Failed: {err}")
+        ocr_result = await reserve_agent.extract_vehicle_data(image_bytes)
+        logger.info(f"[OCR][Sparrow] Result: {ocr_result}")
+
+    logger.debug(f"[OCR+KBA] Combined OCR result: {ocr_result}")
+
+    vin = ocr_result.get("vin")
+    kba = ocr_result.get("kba") or {}
+    hsn = kba.get("hsn")
+    tsn = kba.get("tsn")
+
+    logger.info(f"[OCR+KBA] Parsed from OCR: vin={vin}, hsn={hsn}, tsn={tsn}")
+
+    # --- 3. Проверяем, что HSN/TSN вообще нашлись ---
+    if not hsn or not tsn:
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail="You must provide either vin/kba or a document."
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Unable to detect HSN/TSN (KBA) from provided document",
         )
 
-    # Здесь можно добавить логику распознавания документа
-    # Пока мок: если есть документ, просто создаем vehicle с test VIN
+    # --- 4. Ходим в AutoteileMarkt по HSN/TSN (как в /by-kba) ---
     try:
-        vehicle = Vehicle(
-            user_id=current_user.id,
-            vin=vin or "MOCK_VIN_FROM_DOC",
-            brand="MockBrand",
-            model="MockModel",
-            engine="MockEngine",
-            kba_code=vin or "MOCK_KBA",
-            search_code=search_code,
+        async with aiohttp.ClientSession() as session:
+            agent = AutoteileMarktAgent(session)
+            result = await agent.fetch_vehicle(hsn.strip(), tsn.upper().strip())
+
+        if not result:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Vehicle not found by given HSN/TSN extracted from OCR",
+            )
+
+        if not result.get("kba_id"):
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="KBA ID not detected in response from autoteile-markt.de",
+            )
+
+        logger.info(
+            f"[OCR+KBA] Vehicle found for hsn={hsn}, tsn={tsn}: {result}"
         )
-        db.add(vehicle)
-        await db.commit()
-        await db.refresh(vehicle)
-        logger.info(f"User {current_user.email} added vehicle {vehicle.id} via doc or VIN")
-        return vehicle
-    except SQLAlchemyError as e:
-        await db.rollback()
-        logger.error(f"DB error while adding vehicle for {current_user.email}: {e}")
-        raise HTTPException(status_code=500, detail="Database error while adding vehicle")
+
+        # --- 5. Мапим в KBAVehicleInfo (так же, как в /by-kba) ---
+        return KBAVehicleInfo(
+            brand=result.get("brand"),
+            model=result.get("model"),
+            engine=result.get("engine"),
+            kba_id=result.get("kba_id"),
+            url=result.get("url"),
+            search_code=result.get("search_code"),
+        )
+
+    except aiohttp.ClientError:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Service autoteile-markt.de is unavailable",
+        )
+    except HTTPException:
+        # перекидываем дальше 404/422, которые сами кинули выше
+        raise
     except Exception as e:
-        await db.rollback()
-        logger.exception(f"Unexpected error while adding vehicle for {current_user.email}: {e}")
-        raise HTTPException(status_code=500, detail="Unexpected error occurred")
+        logger.exception(f"[OCR+KBA] Unexpected error: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Unexpected error: {str(e)}",
+        )
+
 
 
 @router.post("/by-kba", response_model=KBAVehicleInfo)
