@@ -38,8 +38,8 @@ services:
       MINIO_ACCESS_KEY: minio
       MINIO_SECRET_KEY: minio123
       MINIO_BUCKET: autoteile
-      MINIO_SECURE: "false"
-      MINIO_PUBLIC_ENDPOINT: "localhost:9000"
+      MINIO_SECURE: "false"             # т.к. внешне ходим по https
+      MINIO_PUBLIC_ENDPOINT: fixautoteile.de
     depends_on:
       - db
       - redis

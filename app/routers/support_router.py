@@ -8,7 +8,11 @@ from app.schemas.support_schema import (
     SupportMessageRead,
     SupportTicketCreate,
     SupportTicketRead,
+
 )
+
+import json
+
 from app.services.support_service import SupportService
 
 router = APIRouter(prefix="/support", tags=["Support"])
