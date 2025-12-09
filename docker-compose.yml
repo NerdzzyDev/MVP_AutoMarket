@@ -34,10 +34,12 @@ services:
       DB_NAME: autoteile_db
       OCR_SPACE_API_KEY: ${OCR_SPACE_API_KEY}
       GOOGLE_APPLICATION_CREDENTIALS: /app/secrets/fix-autoscan-hub-463814-a285a546da5f.json
-      MINIO_ENDPOINT: minio
+      MINIO_ENDPOINT: minio:9000
       MINIO_ACCESS_KEY: minio
       MINIO_SECRET_KEY: minio123
       MINIO_BUCKET: autoteile
+      MINIO_SECURE: "false"
+      MINIO_PUBLIC_ENDPOINT: "localhost:9000"
     depends_on:
       - db
       - redis
