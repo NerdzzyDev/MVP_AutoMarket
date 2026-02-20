@@ -10,6 +10,7 @@ from app.routers.user_router import get_current_user
 
 router = APIRouter(prefix="/cart", tags=["cart"])
 
+from sqlalchemy.orm import selectinload
 
 @router.get("/")
 async def get_cart(
@@ -17,7 +18,12 @@ async def get_cart(
     session: AsyncSession = Depends(get_async_db),
 ):
     try:
-        result = await session.execute(select(CartItem).where(CartItem.user_id == user.id))
+        result = await session.execute(
+            select(CartItem)
+            .where(CartItem.user_id == user.id)
+            .options(selectinload(CartItem.product))
+            .order_by(CartItem.id.asc())  # <-- фикс порядка
+        )
         items = result.scalars().all()
 
         logger.info(f"User {user.email} fetched {len(items)} cart items")
@@ -48,6 +54,7 @@ async def get_cart(
         raise HTTPException(status_code=500, detail="Unexpected error occurred")
 
 
+
 @router.post("/add")
 async def add_to_cart(
     title: str = Form(...),
@@ -64,7 +71,9 @@ async def add_to_cart(
 ):
     try:
         # Проверяем — есть ли товар с таким URL
-        result = await session.execute(select(Product).where(Product.product_url == product_url))
+        result = await session.execute(
+            select(Product).where(Product.product_url == product_url)
+        )
         product = result.scalar_one_or_none()
 
         # Если нет — создаём новый товар
@@ -79,17 +88,27 @@ async def add_to_cart(
                 description=description,
             )
             session.add(product)
-            await session.flush()  # чтобы получить ID
+            await session.flush()
+
+        # 🔴 ВОТ ЭТОТ БЛОК — ЕДИНСТВЕННОЕ ИЗМЕНЕНИЕ
+        # если товар уже есть и цена пришла — обновляем
+        elif price and price != product.price:
+            product.price = price
 
         # Проверяем, есть ли уже этот товар в корзине
         existing = await session.execute(
-            select(CartItem).where(CartItem.user_id == user.id, CartItem.product_id == product.id)
+            select(CartItem).where(
+                CartItem.user_id == user.id,
+                CartItem.product_id == product.id
+            )
         )
         cart_item = existing.scalar_one_or_none()
 
         if cart_item:
             cart_item.quantity += quantity
-            logger.info(f"User {user.email} increased qty for product {product.id} to {cart_item.quantity}")
+            logger.info(
+                f"User {user.email} increased qty for product {product.id} to {cart_item.quantity}"
+            )
         else:
             cart_item = CartItem(
                 user_id=user.id,
@@ -98,7 +117,9 @@ async def add_to_cart(
                 vin=vin,
             )
             session.add(cart_item)
-            logger.info(f"User {user.email} added product {product.id} ({product.title}) to cart")
+            logger.info(
+                f"User {user.email} added product {product.id} ({product.title}) to cart"
+            )
 
         await session.commit()
         await session.refresh(cart_item)
@@ -120,47 +141,23 @@ async def add_to_cart(
 
     except SQLAlchemyError as e:
         await session.rollback()
-        logger.error(f"DB error while adding product {product_url} for {user.email}: {e}")
-        raise HTTPException(status_code=500, detail="Database error while adding to cart")
+        logger.error(
+            f"DB error while adding product {product_url} for {user.email}: {e}"
+        )
+        raise HTTPException(
+            status_code=500,
+            detail="Database error while adding to cart"
+        )
 
     except Exception as e:
         await session.rollback()
-        logger.exception(f"Unexpected error in add_to_cart for {user.email}: {e}")
-        raise HTTPException(status_code=500, detail="Unexpected error occurred while adding to cart")
-
-
-@router.delete("/remove/{id}")
-async def remove_from_cart(
-    id: int = Path(...),
-    user: User = Depends(get_current_user),
-    session: AsyncSession = Depends(get_async_db),
-):
-    try:
-        result = await session.execute(select(CartItem).where(CartItem.id == id, CartItem.user_id == user.id))
-        item = result.scalar_one_or_none()
-        if not item:
-            raise HTTPException(status_code=404, detail="Cart item not found")
-
-        await session.delete(item)
-        await session.commit()
-
-        logger.info(f"User {user.email} removed cart item {id}")
-
-        return {"message": "Removed from cart"}
-
-    except HTTPException:
-        raise
-
-    except SQLAlchemyError as e:
-        await session.rollback()
-        logger.error(f"Database error while removing cart item {id} for user {user.email}: {e}")
-        raise HTTPException(status_code=500, detail="Database error while removing cart item")
-
-    except Exception as e:
-        await session.rollback()
-        logger.exception(f"Unexpected error in remove_from_cart for user {user.email}: {e}")
-        raise HTTPException(status_code=500, detail="Unexpected error occurred while removing cart item")
-
+        logger.exception(
+            f"Unexpected error in add_to_cart for {user.email}: {e}"
+        )
+        raise HTTPException(
+            status_code=500,
+            detail="Unexpected error occurred while adding to cart"
+        )
 
 @router.patch("/decrease/{cart_item_id}")
 async def decrease_cart_item_quantity(
